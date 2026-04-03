@@ -15,7 +15,6 @@
   <script src="firebase-config.js"></script>
   <script src="utils.js"></script>
   <style>
-    /* Copy all admin styles from previous admin.html, plus add login overlay styles */
     .admin-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
     .tab-btn { background: none; border: none; padding: 0.6rem 1.2rem; font-weight: 600; cursor: pointer; border-radius: 40px; color: var(--muted); transition: all 0.2s; }
     .tab-btn.active { background: var(--gold); color: white; }
@@ -30,7 +29,6 @@
     .modal-card { background: white; padding: 1.5rem; border-radius: 24px; max-width: 450px; width: 90%; }
     .modal-card input, .modal-card select { width: 100%; padding: 0.6rem; margin-bottom: 0.8rem; border-radius: 12px; border: 1px solid var(--border); }
     .form-buttons { display: flex; gap: 0.8rem; justify-content: flex-end; margin-top: 1rem; }
-    /* Admin login overlay */
     #adminLoginOverlay {
       position: fixed; top:0; left:0; width:100%; height:100%;
       background: rgba(0,0,0,0.85); z-index: 10001;
@@ -50,7 +48,7 @@
 </head>
 <body>
 
-<!-- Admin Login Overlay (shown if not authenticated as admin) -->
+<!-- Admin Login Overlay -->
 <div id="adminLoginOverlay">
   <div class="admin-login-card">
     <i class="fas fa-lock"></i>
@@ -64,7 +62,7 @@
   </div>
 </div>
 
-<!-- Main Admin Panel (hidden until admin logged in) -->
+<!-- Main Admin Panel -->
 <div id="adminPanel" style="display:none;">
   <div class="app-container" style="max-width: 1400px; margin: 1.5rem auto;">
     <header class="main-header">
@@ -111,19 +109,51 @@
   </div>
 </div>
 
-<!-- Edit Student Modal -->
-<div id="editStudentModal" class="modal">...</div>
-<!-- Edit Payment Modal -->
-<div id="editPaymentModal" class="modal">...</div>
+<!-- Edit Student Modal (static) -->
+<div id="editStudentModal" class="modal">
+  <div class="modal-card">
+    <h3><i class="fas fa-edit"></i> Edit Student</h3>
+    <input type="text" id="editHallTicket" placeholder="Hall Ticket" readonly>
+    <input type="text" id="editName" placeholder="Name">
+    <input type="text" id="editFatherName" placeholder="Father Name">
+    <input type="text" id="editGroup" placeholder="Group">
+    <input type="text" id="editResult" placeholder="Result">
+    <div class="form-buttons">
+      <button class="btn-secondary" id="closeEditStudent">Cancel</button>
+      <button class="btn-primary" id="saveEditStudent">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Payment Modal (static) -->
+<div id="editPaymentModal" class="modal">
+  <div class="modal-card">
+    <h3><i class="fas fa-edit"></i> Edit Payment</h3>
+    <input type="text" id="editPaymentId" style="display:none;">
+    <input type="text" id="editHall" placeholder="Hall Ticket" readonly>
+    <input type="text" id="editNamePayment" placeholder="Name">
+    <input type="number" id="editRegular" placeholder="Regular Fee" step="1">
+    <input type="number" id="editBacklog" placeholder="Backlog Fee" step="1">
+    <select id="editMode">
+      <option value="Cash">Cash</option>
+      <option value="Online">Online</option>
+    </select>
+    <input type="text" id="editUtr" placeholder="UTR">
+    <input type="date" id="editDate">
+    <div class="form-buttons">
+      <button class="btn-secondary" id="closeEditPayment">Cancel</button>
+      <button class="btn-primary" id="saveEditPayment">Save Changes</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // Firebase Auth
 const auth = firebase.auth();
 
-// ─── ADMIN EMAIL (only this email can access admin panel) ───
-const ADMIN_EMAIL = "admin@masterminds.com"; // CHANGE THIS to your admin email
+// Only this email can access admin panel (change as needed)
+const ADMIN_EMAIL = "admin@masterminds.com";
 
-// DOM elements
 const adminLoginOverlay = document.getElementById('adminLoginOverlay');
 const adminPanel = document.getElementById('adminPanel');
 const adminEmail = document.getElementById('adminEmail');
@@ -132,17 +162,14 @@ const adminLoginBtn = document.getElementById('adminLoginBtn');
 const adminLoginError = document.getElementById('adminLoginError');
 const adminLogoutBtn = document.getElementById('adminLogoutBtn');
 
-// Check auth state
+// Auth state listener
 auth.onAuthStateChanged(async (user) => {
   if (user && user.email === ADMIN_EMAIL) {
-    // Authorized admin
     adminLoginOverlay.style.display = 'none';
     adminPanel.style.display = 'block';
-    // Load data
     await loadStudents();
     await loadPayments();
   } else {
-    // Not logged in or not admin – show login and sign out any existing user
     if (user) await auth.signOut();
     adminLoginOverlay.style.display = 'flex';
     adminPanel.style.display = 'none';
@@ -155,7 +182,6 @@ adminLoginBtn.addEventListener('click', async () => {
   adminLoginError.innerText = '';
   try {
     await auth.signInWithEmailAndPassword(email, password);
-    // onAuthStateChanged will handle redirect
   } catch (err) {
     adminLoginError.innerText = err.message;
   }
@@ -167,7 +193,7 @@ adminLogoutBtn.addEventListener('click', async () => {
 });
 
 // ─────────────────────────────────────────────
-// Admin data management (same as before)
+// Data management
 // ─────────────────────────────────────────────
 let students = [];
 let payments = [];
@@ -205,8 +231,11 @@ async function loadPayments() {
 
 function renderStudentsTable() {
   const container = document.getElementById('studentsTable');
-  if (!students.length) { container.innerHTML = '<div class="empty-state">No students found.</div>'; return; }
-  let html = `<table><thead><tr><th>Hall Ticket</th><th>Name</th><th>Father Name</th><th>Group</th><th>Result</th><th>Actions</th></tr></thead><tbody>`;
+  if (!students.length) {
+    container.innerHTML = '<div class="empty-state">No students found.</div>';
+    return;
+  }
+  let html = `<tr><thead><tr><th>Hall Ticket</th><th>Name</th><th>Father Name</th><th>Group</th><th>Result</th><th>Actions</th></tr></thead><tbody>`;
   students.forEach(s => {
     html += `<tr>
       <td>${escapeHtml(s['Hall Ticket'])}</td>
@@ -214,37 +243,41 @@ function renderStudentsTable() {
       <td>${escapeHtml(s['Father Name'])}</td>
       <td>${escapeHtml(s['Group'])}</td>
       <td>${escapeHtml(s['Result'])}</td>
-      <td><button class="edit-btn" data-hall="${escapeHtml(s['Hall Ticket'])}"><i class="fas fa-edit"></i> Edit</button>
-              <button class="delete-btn" data-hall="${escapeHtml(s['Hall Ticket'])}"><i class="fas fa-trash"></i> Delete</button>
-       </td></tr>`;
+      <td>
+        <button class="edit-btn" data-hall="${escapeHtml(s['Hall Ticket'])}"><i class="fas fa-edit"></i> Edit</button>
+        <button class="delete-btn" data-hall="${escapeHtml(s['Hall Ticket'])}"><i class="fas fa-trash"></i> Delete</button>
+      </td>
+    </tr>`;
   });
   html += `</tbody></table>`;
   container.innerHTML = html;
 
-  document.querySelectorAll('.edit-btn').forEach(btn => {
+  // Attach edit events
+  document.querySelectorAll('#studentsTable .edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const ht = btn.getAttribute('data-hall');
       const student = students.find(s => String(s['Hall Ticket']) === ht);
       if (student) openEditStudentModal(student);
     });
   });
-  document.querySelectorAll('.delete-btn').forEach(btn => {
+  // Attach delete events
+  document.querySelectorAll('#studentsTable .delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const ht = btn.getAttribute('data-hall');
       const student = students.find(s => String(s['Hall Ticket']) === ht);
-      if (student && confirm(`Delete student ${student['Name']} (${ht})? This will also delete ALL payments for this student.`)) {
-        const toDelete = payments.filter(p => String(p.hall) === ht);
-        if (toDelete.length > 0 && !confirm(`${toDelete.length} payment(s) will also be deleted. Proceed?`)) return;
-        const batch = db.batch();
-        toDelete.forEach(p => batch.delete(paymentsCollection.doc(p.id)));
-        await batch.commit();
-        payments = payments.filter(p => String(p.hall) !== ht);
-        students = students.filter(s => String(s['Hall Ticket']) !== ht);
-        await saveStudentsToCloud();
-        showToast(`Student ${student['Name']} deleted.`, 'success');
-        renderStudentsTable();
-        renderPaymentsTable();
-      }
+      if (!student) return;
+      if (!confirm(`Delete student "${student['Name']}" (${ht})? This will also delete ALL payments for this student.`)) return;
+      const toDelete = payments.filter(p => String(p.hall) === ht);
+      if (toDelete.length && !confirm(`${toDelete.length} payment(s) will also be deleted. Proceed?`)) return;
+      const batch = db.batch();
+      toDelete.forEach(p => batch.delete(paymentsCollection.doc(p.id)));
+      await batch.commit();
+      payments = payments.filter(p => String(p.hall) !== ht);
+      students = students.filter(s => String(s['Hall Ticket']) !== ht);
+      await saveStudentsToCloud();
+      showToast(`Student ${student['Name']} deleted.`, 'success');
+      renderStudentsTable();
+      renderPaymentsTable();
     });
   });
 }
@@ -280,8 +313,11 @@ document.getElementById('closeEditStudent').addEventListener('click', () => {
 
 function renderPaymentsTable() {
   const container = document.getElementById('paymentsTable');
-  if (!payments.length) { container.innerHTML = '<div class="empty-state">No payments found.</div>'; return; }
-  let html = `<table><thead><tr><th>Hall Ticket</th><th>Name</th><th>Regular</th><th>Backlog</th><th>Total</th><th>Mode</th><th>UTR</th><th>Date</th><th>Actions</th></tr></thead><tbody>`;
+  if (!payments.length) {
+    container.innerHTML = '<div class="empty-state">No payments found.</div>';
+    return;
+  }
+  let html = `<table><thead><tr><th>Hall Ticket</th><th>Name</th><th>Regular (₹)</th><th>Backlog (₹)</th><th>Total (₹)</th><th>Mode</th><th>UTR</th><th>Date</th><th>Actions</th></tr></thead><tbody>`;
   payments.forEach(p => {
     const total = (parseFloat(p.regularFee)||0) + (parseFloat(p.backlogFee)||0);
     html += `<tr>
@@ -293,13 +329,16 @@ function renderPaymentsTable() {
       <td>${escapeHtml(p.mode)}</td>
       <td>${escapeHtml(p.utr || '—')}</td>
       <td>${escapeHtml(p.date)}</td>
-      <td><button class="edit-btn" data-id="${p.id}"><i class="fas fa-edit"></i> Edit</button>
-              <button class="delete-btn" data-id="${p.id}"><i class="fas fa-trash"></i> Delete</button>
-       </td></tr>`;
+      <td>
+        <button class="edit-btn" data-id="${p.id}"><i class="fas fa-edit"></i> Edit</button>
+        <button class="delete-btn" data-id="${p.id}"><i class="fas fa-trash"></i> Delete</button>
+      </td>
+    </tr>`;
   });
   html += `</tbody></table>`;
   container.innerHTML = html;
 
+  // Attach edit events
   document.querySelectorAll('#paymentsTable .edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id');
@@ -307,16 +346,17 @@ function renderPaymentsTable() {
       if (payment) openEditPaymentModal(payment);
     });
   });
+  // Attach delete events
   document.querySelectorAll('#paymentsTable .delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
       const payment = payments.find(p => p.id === id);
-      if (payment && confirm(`Delete payment for ${payment.name}?`)) {
-        await paymentsCollection.doc(id).delete();
-        payments = payments.filter(p => p.id !== id);
-        showToast('Payment deleted', 'success');
-        renderPaymentsTable();
-      }
+      if (!payment) return;
+      if (!confirm(`Delete payment for ${payment.name} (₹${payment.regularFee} + ₹${payment.backlogFee})?`)) return;
+      await paymentsCollection.doc(id).delete();
+      payments = payments.filter(p => p.id !== id);
+      showToast('Payment deleted', 'success');
+      renderPaymentsTable();
     });
   });
 }
@@ -340,9 +380,16 @@ document.getElementById('saveEditPayment').addEventListener('click', async () =>
   const mode = document.getElementById('editMode').value;
   let utr = document.getElementById('editUtr').value.trim();
   const date = document.getElementById('editDate').value;
-  if (mode === 'Online' && !utr) { showToast('UTR required', 'warning'); return; }
+  if (mode === 'Online' && !utr) { showToast('UTR required for online payment', 'warning'); return; }
   if (mode !== 'Online') utr = '';
-  await paymentsCollection.doc(id).update({ regularFee: regular || '0', backlogFee: backlog || '0', mode, utr, date });
+  await paymentsCollection.doc(id).update({
+    regularFee: regular || '0',
+    backlogFee: backlog || '0',
+    mode: mode,
+    utr: utr,
+    date: date
+  });
+  // Update local array
   const index = payments.findIndex(p => p.id === id);
   if (index !== -1) {
     payments[index].regularFee = regular || '0';
@@ -371,41 +418,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     else renderPaymentsTable();
   });
 });
-
-// Include modals HTML (quickly add them)
-document.body.insertAdjacentHTML('beforeend', `
-<div id="editStudentModal" class="modal">
-  <div class="modal-card">
-    <h3><i class="fas fa-edit"></i> Edit Student</h3>
-    <input type="text" id="editHallTicket" placeholder="Hall Ticket" readonly>
-    <input type="text" id="editName" placeholder="Name">
-    <input type="text" id="editFatherName" placeholder="Father Name">
-    <input type="text" id="editGroup" placeholder="Group">
-    <input type="text" id="editResult" placeholder="Result">
-    <div class="form-buttons">
-      <button class="btn-secondary" id="closeEditStudent">Cancel</button>
-      <button class="btn-primary" id="saveEditStudent">Save Changes</button>
-    </div>
-  </div>
-</div>
-<div id="editPaymentModal" class="modal">
-  <div class="modal-card">
-    <h3><i class="fas fa-edit"></i> Edit Payment</h3>
-    <input type="text" id="editPaymentId" style="display:none;">
-    <input type="text" id="editHall" placeholder="Hall Ticket" readonly>
-    <input type="text" id="editNamePayment" placeholder="Name">
-    <input type="number" id="editRegular" placeholder="Regular Fee">
-    <input type="number" id="editBacklog" placeholder="Backlog Fee">
-    <select id="editMode"><option value="Cash">Cash</option><option value="Online">Online</option></select>
-    <input type="text" id="editUtr" placeholder="UTR">
-    <input type="date" id="editDate">
-    <div class="form-buttons">
-      <button class="btn-secondary" id="closeEditPayment">Cancel</button>
-      <button class="btn-primary" id="saveEditPayment">Save Changes</button>
-    </div>
-  </div>
-</div>
-`);
 </script>
 </body>
 </html>
