@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Master Minds | Payment History</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="utils.js"></script>
+  <style>
+    .cors-alert-history {
+      background: #fff8e1; border: 1.5px solid #fde68a;
+      border-radius: 12px; padding: 1rem 1.1rem;
+      margin-bottom: 1rem; display: none;
+    }
+    .cors-alert-history h4 {
+      font-family: 'Sora', sans-serif; font-size: .9rem;
+      color: #92400e; margin-bottom: .4rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .local-pick {
+      border: 2px dashed #fcd34d; border-radius: 10px;
+      padding: .8rem; text-align: center; cursor: pointer;
+      background: #fffbeb; margin-top: .6rem;
+    }
+    .local-pick input { display: none; }
+    .local-pick p { margin: 0; font-size: .82rem; color: #92400e; font-weight: 600; }
+    /* Ensure table scrolls horizontally on small screens */
+    .table-wrapper {
+      overflow-x: auto;
+      width: 100%;
+    }
+    .data-table {
+      min-width: 1100px;  /* forces horizontal scroll on narrow screens */
+    }
+    .data-table th, .data-table td {
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container" style="max-width:1400px; margin:1.5rem auto;">
+  <header class="main-header">
+    <div class="logo-area">
+      <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+      <div class="logo-text"><h1>MASTER MINDS</h1><span>The Learning Hub</span></div>
+    </div>
+    <a href="index.html" class="header-back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+  </header>
+
+  <div class="page-content">
+    <div class="page-title"><i class="fas fa-history" style="color:var(--gold)"></i> Payment History</div>
+
+    <!-- CORS fallback for student data -->
+    <div class="cors-alert-history" id="corsAlert">
+      <h4><i class="fas fa-exclamation-triangle"></i> Could not load student details (Group/Result)</h4>
+      <p>To show Group and Result columns, please load your students.xlsx file.</p>
+      <div class="local-pick" onclick="document.getElementById('localStudentInput').click()">
+        <i class="fas fa-folder-open" style="font-size:1.3rem;color:#b45309;margin-bottom:.3rem;display:block;"></i>
+        <p>📂 Click to load students.xlsx (for Group & Result)</p>
+        <input type="file" id="localStudentInput" accept=".xlsx,.xls">
+      </div>
+    </div>
+
+    <!-- Summary chips -->
+    <div class="summary-strip" id="summaryStrip" style="display:none;">
+      <div class="summary-chip"><i class="fas fa-receipt"></i> Records: <strong id="chipCount">0</strong></div>
+      <div class="summary-chip green"><i class="fas fa-rupee-sign"></i> Total Collected: <strong id="chipTotal">₹0</strong></div>
+      <div class="summary-chip"><i class="fas fa-money-bill-wave"></i> Regular: <strong id="chipRegular">₹0</strong></div>
+      <div class="summary-chip"><i class="fas fa-clock"></i> Backlog: <strong id="chipBacklog">₹0</strong></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <div class="input-group">
+        <label><i class="fas fa-search"></i> Search</label>
+        <input type="text" id="filterSearch" placeholder="Name or Hall Ticket…">
+      </div>
+      <div class="input-group">
+        <label><i class="fas fa-layer-group"></i> Group</label>
+        <select id="filterGroup"><option value="">All Groups</option></select>
+      </div>
+      <div class="input-group">
+        <label><i class="fas fa-credit-card"></i> Mode</label>
+        <select id="filterMode"><option value="">All Modes</option><option>Cash</option><option>Online</option></select>
+      </div>
+      <div class="input-group">
+        <label><i class="fas fa-calendar-alt"></i> From Date</label>
+        <input type="date" id="filterFrom">
+      </div>
+      <div class="input-group">
+        <label><i class="fas fa-calendar-alt"></i> To Date</label>
+        <input type="date" id="filterTo">
+      </div>
+      <div class="input-group" style="display:flex;align-items:flex-end;">
+        <button class="btn-secondary" id="clearFiltersBtn" style="margin-top:0;width:auto;padding:.55rem 1rem;">
+          <i class="fas fa-times"></i> Clear
+        </button>
+      </div>
+    </div>
+
+    <!-- Table container -->
+    <div id="historyContainer">
+      <div class="placeholder-text"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading payment records…</div>
+    </div>
+
+    <!-- Export -->
+    <div class="export-row">
+      <button class="btn-primary" id="exportBtn" style="margin-top:0;">
+        <i class="fas fa-file-excel"></i> Export to Excel
+      </button>
+    </div>
+  </div>
+
+  <footer class="main-footer">
+    <p>Developed by Karthik Bonagiri &nbsp;|&nbsp; Master Minds – The Learning Hub &nbsp;|&nbsp; +91 90148 95357</p>
+  </footer>
+</div>
+
+<script>
+let allPayments      = [];
+let filteredPayments = [];
+let studentMap       = new Map(); // Hall Ticket -> student object (including Group, Result)
+let groupsSet        = new Set();
+
+// Load students from cloud or local fallback
+async function loadStudentData() {
+  try {
+    const students = await loadStudentsFromCloud();
+    studentMap.clear();
+    groupsSet.clear();
+    students.forEach(s => {
+      studentMap.set(String(s['Hall Ticket']), s);
+      if (s['Group']) groupsSet.add(s['Group']);
+    });
+    updateGroupFilter();
+    document.getElementById('corsAlert').style.display = 'none';
+    console.log(`Loaded ${studentMap.size} students for group/result lookup`);
+  } catch (err) {
+    console.warn(err);
+    if (err.type === 'CORS_ERROR' || err.type === 'FIREBASE_ERROR') {
+      document.getElementById('corsAlert').style.display = 'block';
+    } else {
+      showToast('Could not load student details: ' + err.message, 'warning');
+    }
+  }
+}
+
+function updateGroupFilter() {
+  const groupSelect = document.getElementById('filterGroup');
+  const currentVal = groupSelect.value;
+  groupSelect.innerHTML = '<option value="">All Groups</option>';
+  [...groupsSet].sort().forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g; opt.textContent = g;
+    groupSelect.appendChild(opt);
+  });
+  if (currentVal && groupsSet.has(currentVal)) groupSelect.value = currentVal;
+}
+
+// Local file fallback for student list
+document.getElementById('localStudentInput').addEventListener('change', async (e) => {
+  if (!e.target.files.length) return;
+  try {
+    const buf = await e.target.files[0].arrayBuffer();
+    const students = parseStudentsFromBuffer(buf);
+    studentMap.clear();
+    groupsSet.clear();
+    students.forEach(s => {
+      studentMap.set(String(s['Hall Ticket']), s);
+      if (s['Group']) groupsSet.add(s['Group']);
+    });
+    updateGroupFilter();
+    document.getElementById('corsAlert').style.display = 'none';
+    showToast(`Loaded ${studentMap.size} students for group/result`, 'success');
+    renderTable(); // re-render to show group & result
+  } catch (err) { showToast('Error: ' + err.message, 'error'); }
+  e.target.value = '';
+});
+
+// Load payments from Firestore
+async function loadPayments() {
+  try {
+    const snap = await paymentsCollection.orderBy('timestamp', 'desc').get();
+    allPayments = [];
+    snap.forEach(doc => allPayments.push({ _id: doc.id, ...doc.data() }));
+    document.getElementById('summaryStrip').style.display = 'flex';
+    applyFilters();
+  } catch (err) {
+    document.getElementById('historyContainer').innerHTML =
+      `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+function updateSummary(list) {
+  let reg = 0, back = 0;
+  list.forEach(p => {
+    reg  += parseFloat(p.regularFee) || 0;
+    back += parseFloat(p.backlogFee) || 0;
+  });
+  document.getElementById('chipCount').textContent   = list.length;
+  document.getElementById('chipTotal').textContent   = formatINR(reg + back);
+  document.getElementById('chipRegular').textContent = formatINR(reg);
+  document.getElementById('chipBacklog').textContent = formatINR(back);
+}
+
+function applyFilters() {
+  const search = document.getElementById('filterSearch').value.trim().toLowerCase();
+  const group  = document.getElementById('filterGroup').value;
+  const mode   = document.getElementById('filterMode').value;
+  const from   = document.getElementById('filterFrom').value;
+  const to     = document.getElementById('filterTo').value;
+
+  filteredPayments = allPayments.filter(p => {
+    const student = studentMap.get(String(p.hall));
+    const studentGroup = student ? (student['Group'] || '') : '';
+    const matchSearch = !search ||
+      (p.name && p.name.toLowerCase().includes(search)) ||
+      (p.hall && String(p.hall).toLowerCase().includes(search));
+    const matchGroup = !group || studentGroup === group;
+    const matchMode = !mode || p.mode === mode;
+    const matchFrom = !from || p.date >= from;
+    const matchTo   = !to   || p.date <= to;
+    return matchSearch && matchGroup && matchMode && matchFrom && matchTo;
+  });
+
+  updateSummary(filteredPayments);
+  renderTable();
+}
+
+function renderTable() {
+  const container = document.getElementById('historyContainer');
+  if (filteredPayments.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      <i class="fas fa-receipt"></i>
+      <p>${allPayments.length === 0 ? 'No payments recorded yet.' : 'No records match your filter.'}</p>
+    </div>`;
+    return;
+  }
+
+  const rows = filteredPayments.map(p => {
+    const student = studentMap.get(String(p.hall));
+    const group   = student ? (student['Group'] || '—') : '—';
+    const result  = student ? (student['Result'] || '—') : '—';
+    const total = (parseFloat(p.regularFee) || 0) + (parseFloat(p.backlogFee) || 0);
+    const modeClass = p.mode === 'Online' ? 'mode-online' : 'mode-cash';
+    const modeIcon  = p.mode === 'Online' ? '📱' : '💵';
+    // UTR column is explicitly added here
+    return `<tr>
+      <td>${escapeHtml(p.hall)}</td>
+      <td class="td-name">${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(group)}</td>
+      <td class="td-amount" style="color:var(--green);">${formatINR(p.regularFee)}</td>
+      <td class="td-amount" style="color:var(--navy-light);">${formatINR(p.backlogFee)}</td>
+      <td class="td-amount"><strong>${formatINR(total)}</strong></td>
+      <td>${escapeHtml(result)}</td>
+      <td><span class="mode-pill ${modeClass}">${modeIcon} ${escapeHtml(p.mode)}</span></td>
+      <td>${escapeHtml(p.utr || '—')}</td>   <!-- UTR column -->
+      <td>${escapeHtml(p.date)}</td>
+     
+       </td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem;">
+      Showing <strong>${filteredPayments.length}</strong> of <strong>${allPayments.length}</strong> record${allPayments.length !== 1 ? 's' : ''}
+    </div>
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Hall Ticket</th><th>Name</th><th>Group</th>
+            <th>Regular (₹)</th><th>Backlog (₹)</th>
+            <th>Total (₹)</th><th>Result</th><th>Mode</th>
+            <th>UTR</th><th>Date</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function deletePayment(docId, name) {
+  if (!confirm(`Delete payment record for "${name}"?\n\nThis cannot be undone.`)) return;
+  try {
+    await paymentsCollection.doc(docId).delete();
+    allPayments = allPayments.filter(p => p._id !== docId);
+    showToast(`Payment deleted for ${name}`, 'info');
+    applyFilters();
+  } catch (err) { showToast('Delete failed: ' + err.message, 'error'); }
+}
+
+// Event listeners
+['filterSearch','filterFrom','filterTo'].forEach(id =>
+  document.getElementById(id).addEventListener('input', applyFilters));
+document.getElementById('filterGroup').addEventListener('change', applyFilters);
+document.getElementById('filterMode').addEventListener('change', applyFilters);
+document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+  ['filterSearch','filterFrom','filterTo'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('filterGroup').value = '';
+  document.getElementById('filterMode').value = '';
+  applyFilters();
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if (!filteredPayments.length) { showToast('No records to export.', 'info'); return; }
+  const exportData = filteredPayments.map(p => {
+    const student = studentMap.get(String(p.hall));
+    const group   = student ? (student['Group'] || '—') : '—';
+    const result  = student ? (student['Result'] || '—') : '—';
+    return {
+      'Hall Ticket': p.hall,
+      'Name': p.name,
+      'Group': group,
+      'Regular Fee': p.regularFee,
+      'Backlog Fee': p.backlogFee,
+      'Total': (parseFloat(p.regularFee)||0) + (parseFloat(p.backlogFee)||0),
+      'Result': result,
+      'Mode': p.mode,
+      'UTR': p.utr || '',
+      'Date': p.date
+    };
+  });
+  exportToExcel(exportData, `Payment_History_${new Date().toISOString().slice(0,10)}`, 'Payments');
+  showToast('Exported!', 'success');
+});
+
+// Initialise
+loadStudentData();
+loadPayments();
+</script>
+</body>
+</html>

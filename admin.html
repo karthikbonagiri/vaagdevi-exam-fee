@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel | Master Minds</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="utils.js"></script>
+  <style>
+    /* Copy all admin styles from previous admin.html, plus add login overlay styles */
+    .admin-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    .tab-btn { background: none; border: none; padding: 0.6rem 1.2rem; font-weight: 600; cursor: pointer; border-radius: 40px; color: var(--muted); transition: all 0.2s; }
+    .tab-btn.active { background: var(--gold); color: white; }
+    .admin-table { overflow-x: auto; margin-top: 1rem; }
+    .admin-table table { width: 100%; border-collapse: collapse; }
+    .admin-table th, .admin-table td { border: 1px solid var(--border); padding: 0.6rem; text-align: left; vertical-align: middle; }
+    .admin-table th { background: var(--navy); color: white; }
+    .edit-btn, .delete-btn { padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.75rem; cursor: pointer; margin: 0 0.2rem; border: none; }
+    .edit-btn { background: #e3f2fd; color: #1565c0; }
+    .delete-btn { background: #fee2e2; color: var(--red); }
+    .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 10000; }
+    .modal-card { background: white; padding: 1.5rem; border-radius: 24px; max-width: 450px; width: 90%; }
+    .modal-card input, .modal-card select { width: 100%; padding: 0.6rem; margin-bottom: 0.8rem; border-radius: 12px; border: 1px solid var(--border); }
+    .form-buttons { display: flex; gap: 0.8rem; justify-content: flex-end; margin-top: 1rem; }
+    /* Admin login overlay */
+    #adminLoginOverlay {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.85); z-index: 10001;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .admin-login-card {
+      background: white; padding: 2rem; border-radius: 28px;
+      max-width: 360px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+    }
+    .admin-login-card i { font-size: 3rem; color: var(--gold); margin-bottom: 1rem; }
+    .admin-login-card h2 { font-family: 'Sora', sans-serif; margin-bottom: 0.5rem; color: var(--navy); }
+    .admin-login-card input { width: 100%; padding: 0.8rem; border-radius: 40px; border: 1px solid var(--border); margin-bottom: 1rem; }
+    .admin-login-card button { margin-top: 0; }
+    .login-error { color: var(--red); font-size: 0.8rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<!-- Admin Login Overlay (shown if not authenticated as admin) -->
+<div id="adminLoginOverlay">
+  <div class="admin-login-card">
+    <i class="fas fa-lock"></i>
+    <h2>Admin Access</h2>
+    <p style="margin-bottom:1.2rem; color:var(--muted);">Enter admin credentials</p>
+    <input type="email" id="adminEmail" placeholder="Admin Email" autocomplete="off">
+    <input type="password" id="adminPassword" placeholder="Password">
+    <button id="adminLoginBtn" class="btn-primary" style="margin-top:0;">Sign In</button>
+    <div id="adminLoginError" class="login-error"></div>
+    <p style="font-size:0.7rem; color:#888; margin-top:1rem;">Authorized personnel only</p>
+  </div>
+</div>
+
+<!-- Main Admin Panel (hidden until admin logged in) -->
+<div id="adminPanel" style="display:none;">
+  <div class="app-container" style="max-width: 1400px; margin: 1.5rem auto;">
+    <header class="main-header">
+      <div class="logo-area">
+        <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+        <div class="logo-text"><h1>Admin Panel</h1><span>Master Minds – The Learning Hub</span></div>
+      </div>
+      <div>
+        <a href="index.html" class="header-back-btn" style="margin-right:0.5rem;"><i class="fas fa-home"></i> Dashboard</a>
+        <button id="adminLogoutBtn" class="header-back-btn" style="background:#c62828;"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div class="admin-tabs">
+        <button class="tab-btn active" data-tab="students">👥 Manage Students</button>
+        <button class="tab-btn" data-tab="payments">💰 Manage Payments</button>
+      </div>
+
+      <!-- Students Tab -->
+      <div id="studentsTab" class="tab-content active">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-users"></i><h3>Student List</h3></div>
+          <div class="card-body">
+            <div class="admin-table" id="studentsTable">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payments Tab -->
+      <div id="paymentsTab" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-history"></i><h3>Payment Records</h3></div>
+          <div class="card-body">
+            <div class="admin-table" id="paymentsTable">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="main-footer">
+      <p>Developed by Karthik Bonagiri &nbsp;|&nbsp; Master Minds – The Learning Hub &nbsp;|&nbsp; +91 90148 95357</p>
+    </footer>
+  </div>
+</div>
+
+<!-- Edit Student Modal -->
+<div id="editStudentModal" class="modal">...</div>
+<!-- Edit Payment Modal -->
+<div id="editPaymentModal" class="modal">...</div>
+
+<script>
+// Firebase Auth
+const auth = firebase.auth();
+
+// ─── ADMIN EMAIL (only this email can access admin panel) ───
+const ADMIN_EMAIL = "admin@masterminds.com"; // CHANGE THIS to your admin email
+
+// DOM elements
+const adminLoginOverlay = document.getElementById('adminLoginOverlay');
+const adminPanel = document.getElementById('adminPanel');
+const adminEmail = document.getElementById('adminEmail');
+const adminPassword = document.getElementById('adminPassword');
+const adminLoginBtn = document.getElementById('adminLoginBtn');
+const adminLoginError = document.getElementById('adminLoginError');
+const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+
+// Check auth state
+auth.onAuthStateChanged(async (user) => {
+  if (user && user.email === ADMIN_EMAIL) {
+    // Authorized admin
+    adminLoginOverlay.style.display = 'none';
+    adminPanel.style.display = 'block';
+    // Load data
+    await loadStudents();
+    await loadPayments();
+  } else {
+    // Not logged in or not admin – show login and sign out any existing user
+    if (user) await auth.signOut();
+    adminLoginOverlay.style.display = 'flex';
+    adminPanel.style.display = 'none';
+  }
+});
+
+adminLoginBtn.addEventListener('click', async () => {
+  const email = adminEmail.value.trim();
+  const password = adminPassword.value;
+  adminLoginError.innerText = '';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+    // onAuthStateChanged will handle redirect
+  } catch (err) {
+    adminLoginError.innerText = err.message;
+  }
+});
+
+adminLogoutBtn.addEventListener('click', async () => {
+  await auth.signOut();
+  location.reload();
+});
+
+// ─────────────────────────────────────────────
+// Admin data management (same as before)
+// ─────────────────────────────────────────────
+let students = [];
+let payments = [];
+
+async function saveStudentsToCloud() {
+  if (!students.length) return;
+  const ws = XLSX.utils.json_to_sheet(students);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Students');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+  const file = new File([blob], 'students.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  await studentsExcelRef.put(file);
+}
+
+async function loadStudents() {
+  try {
+    students = await loadStudentsFromCloud();
+    renderStudentsTable();
+  } catch (err) {
+    document.getElementById('studentsTable').innerHTML = `<div class="empty-state">Error: ${err.message}</div>`;
+  }
+}
+
+async function loadPayments() {
+  try {
+    const snap = await paymentsCollection.orderBy('timestamp', 'desc').get();
+    payments = [];
+    snap.forEach(doc => payments.push({ id: doc.id, ...doc.data() }));
+    renderPaymentsTable();
+  } catch (err) {
+    document.getElementById('paymentsTable').innerHTML = `<div class="empty-state">Error: ${err.message}</div>`;
+  }
+}
+
+function renderStudentsTable() {
+  const container = document.getElementById('studentsTable');
+  if (!students.length) { container.innerHTML = '<div class="empty-state">No students found.</div>'; return; }
+  let html = `<table><thead><tr><th>Hall Ticket</th><th>Name</th><th>Father Name</th><th>Group</th><th>Result</th><th>Actions</th></tr></thead><tbody>`;
+  students.forEach(s => {
+    html += `<tr>
+      <td>${escapeHtml(s['Hall Ticket'])}</td>
+      <td>${escapeHtml(s['Name'])}</td>
+      <td>${escapeHtml(s['Father Name'])}</td>
+      <td>${escapeHtml(s['Group'])}</td>
+      <td>${escapeHtml(s['Result'])}</td>
+      <td><button class="edit-btn" data-hall="${escapeHtml(s['Hall Ticket'])}"><i class="fas fa-edit"></i> Edit</button>
+              <button class="delete-btn" data-hall="${escapeHtml(s['Hall Ticket'])}"><i class="fas fa-trash"></i> Delete</button>
+       </td></tr>`;
+  });
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ht = btn.getAttribute('data-hall');
+      const student = students.find(s => String(s['Hall Ticket']) === ht);
+      if (student) openEditStudentModal(student);
+    });
+  });
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ht = btn.getAttribute('data-hall');
+      const student = students.find(s => String(s['Hall Ticket']) === ht);
+      if (student && confirm(`Delete student ${student['Name']} (${ht})? This will also delete ALL payments for this student.`)) {
+        const toDelete = payments.filter(p => String(p.hall) === ht);
+        if (toDelete.length > 0 && !confirm(`${toDelete.length} payment(s) will also be deleted. Proceed?`)) return;
+        const batch = db.batch();
+        toDelete.forEach(p => batch.delete(paymentsCollection.doc(p.id)));
+        await batch.commit();
+        payments = payments.filter(p => String(p.hall) !== ht);
+        students = students.filter(s => String(s['Hall Ticket']) !== ht);
+        await saveStudentsToCloud();
+        showToast(`Student ${student['Name']} deleted.`, 'success');
+        renderStudentsTable();
+        renderPaymentsTable();
+      }
+    });
+  });
+}
+
+function openEditStudentModal(student) {
+  document.getElementById('editHallTicket').value = student['Hall Ticket'];
+  document.getElementById('editName').value = student['Name'];
+  document.getElementById('editFatherName').value = student['Father Name'] || '';
+  document.getElementById('editGroup').value = student['Group'] || '';
+  document.getElementById('editResult').value = student['Result'] || '';
+  document.getElementById('editStudentModal').style.display = 'flex';
+}
+
+document.getElementById('saveEditStudent').addEventListener('click', async () => {
+  const ht = document.getElementById('editHallTicket').value;
+  const newName = document.getElementById('editName').value.trim();
+  if (!newName) { showToast('Name required', 'warning'); return; }
+  const index = students.findIndex(s => String(s['Hall Ticket']) === ht);
+  if (index !== -1) {
+    students[index]['Name'] = newName;
+    students[index]['Father Name'] = document.getElementById('editFatherName').value.trim();
+    students[index]['Group'] = document.getElementById('editGroup').value.trim();
+    students[index]['Result'] = document.getElementById('editResult').value.trim();
+    await saveStudentsToCloud();
+    showToast('Student updated', 'success');
+    document.getElementById('editStudentModal').style.display = 'none';
+    renderStudentsTable();
+  }
+});
+document.getElementById('closeEditStudent').addEventListener('click', () => {
+  document.getElementById('editStudentModal').style.display = 'none';
+});
+
+function renderPaymentsTable() {
+  const container = document.getElementById('paymentsTable');
+  if (!payments.length) { container.innerHTML = '<div class="empty-state">No payments found.</div>'; return; }
+  let html = `<table><thead><tr><th>Hall Ticket</th><th>Name</th><th>Regular</th><th>Backlog</th><th>Total</th><th>Mode</th><th>UTR</th><th>Date</th><th>Actions</th></tr></thead><tbody>`;
+  payments.forEach(p => {
+    const total = (parseFloat(p.regularFee)||0) + (parseFloat(p.backlogFee)||0);
+    html += `<tr>
+      <td>${escapeHtml(p.hall)}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${formatINR(p.regularFee)}</td>
+      <td>${formatINR(p.backlogFee)}</td>
+      <td><strong>${formatINR(total)}</strong></td>
+      <td>${escapeHtml(p.mode)}</td>
+      <td>${escapeHtml(p.utr || '—')}</td>
+      <td>${escapeHtml(p.date)}</td>
+      <td><button class="edit-btn" data-id="${p.id}"><i class="fas fa-edit"></i> Edit</button>
+              <button class="delete-btn" data-id="${p.id}"><i class="fas fa-trash"></i> Delete</button>
+       </td></tr>`;
+  });
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+
+  document.querySelectorAll('#paymentsTable .edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const payment = payments.find(p => p.id === id);
+      if (payment) openEditPaymentModal(payment);
+    });
+  });
+  document.querySelectorAll('#paymentsTable .delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      const payment = payments.find(p => p.id === id);
+      if (payment && confirm(`Delete payment for ${payment.name}?`)) {
+        await paymentsCollection.doc(id).delete();
+        payments = payments.filter(p => p.id !== id);
+        showToast('Payment deleted', 'success');
+        renderPaymentsTable();
+      }
+    });
+  });
+}
+
+function openEditPaymentModal(payment) {
+  document.getElementById('editPaymentId').value = payment.id;
+  document.getElementById('editHall').value = payment.hall;
+  document.getElementById('editNamePayment').value = payment.name;
+  document.getElementById('editRegular').value = payment.regularFee;
+  document.getElementById('editBacklog').value = payment.backlogFee;
+  document.getElementById('editMode').value = payment.mode;
+  document.getElementById('editUtr').value = payment.utr || '';
+  document.getElementById('editDate').value = payment.date;
+  document.getElementById('editPaymentModal').style.display = 'flex';
+}
+
+document.getElementById('saveEditPayment').addEventListener('click', async () => {
+  const id = document.getElementById('editPaymentId').value;
+  const regular = document.getElementById('editRegular').value;
+  const backlog = document.getElementById('editBacklog').value;
+  const mode = document.getElementById('editMode').value;
+  let utr = document.getElementById('editUtr').value.trim();
+  const date = document.getElementById('editDate').value;
+  if (mode === 'Online' && !utr) { showToast('UTR required', 'warning'); return; }
+  if (mode !== 'Online') utr = '';
+  await paymentsCollection.doc(id).update({ regularFee: regular || '0', backlogFee: backlog || '0', mode, utr, date });
+  const index = payments.findIndex(p => p.id === id);
+  if (index !== -1) {
+    payments[index].regularFee = regular || '0';
+    payments[index].backlogFee = backlog || '0';
+    payments[index].mode = mode;
+    payments[index].utr = utr;
+    payments[index].date = date;
+  }
+  showToast('Payment updated', 'success');
+  document.getElementById('editPaymentModal').style.display = 'none';
+  renderPaymentsTable();
+});
+document.getElementById('closeEditPayment').addEventListener('click', () => {
+  document.getElementById('editPaymentModal').style.display = 'none';
+});
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.getAttribute('data-tab');
+    document.getElementById('studentsTab').style.display = tab === 'students' ? 'block' : 'none';
+    document.getElementById('paymentsTab').style.display = tab === 'payments' ? 'block' : 'none';
+    if (tab === 'students') renderStudentsTable();
+    else renderPaymentsTable();
+  });
+});
+
+// Include modals HTML (quickly add them)
+document.body.insertAdjacentHTML('beforeend', `
+<div id="editStudentModal" class="modal">
+  <div class="modal-card">
+    <h3><i class="fas fa-edit"></i> Edit Student</h3>
+    <input type="text" id="editHallTicket" placeholder="Hall Ticket" readonly>
+    <input type="text" id="editName" placeholder="Name">
+    <input type="text" id="editFatherName" placeholder="Father Name">
+    <input type="text" id="editGroup" placeholder="Group">
+    <input type="text" id="editResult" placeholder="Result">
+    <div class="form-buttons">
+      <button class="btn-secondary" id="closeEditStudent">Cancel</button>
+      <button class="btn-primary" id="saveEditStudent">Save Changes</button>
+    </div>
+  </div>
+</div>
+<div id="editPaymentModal" class="modal">
+  <div class="modal-card">
+    <h3><i class="fas fa-edit"></i> Edit Payment</h3>
+    <input type="text" id="editPaymentId" style="display:none;">
+    <input type="text" id="editHall" placeholder="Hall Ticket" readonly>
+    <input type="text" id="editNamePayment" placeholder="Name">
+    <input type="number" id="editRegular" placeholder="Regular Fee">
+    <input type="number" id="editBacklog" placeholder="Backlog Fee">
+    <select id="editMode"><option value="Cash">Cash</option><option value="Online">Online</option></select>
+    <input type="text" id="editUtr" placeholder="UTR">
+    <input type="date" id="editDate">
+    <div class="form-buttons">
+      <button class="btn-secondary" id="closeEditPayment">Cancel</button>
+      <button class="btn-primary" id="saveEditPayment">Save Changes</button>
+    </div>
+  </div>
+</div>
+`);
+</script>
+</body>
+</html>

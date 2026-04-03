@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Master Minds | Not Paid Students</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="utils.js"></script>
+  <style>
+    .local-fallback {
+      background:#fff8e1; border:1.5px solid #fde68a; border-radius:12px;
+      padding:1rem 1.1rem; margin-bottom:1rem; display:none;
+    }
+    .local-fallback h4 { font-family:'Sora',sans-serif; font-size:.88rem; color:#92400e; margin-bottom:.4rem; }
+    .local-fallback p  { font-size:.8rem; color:#78350f; margin-bottom:.6rem; }
+    .local-pick {
+      border:2px dashed #fcd34d; border-radius:10px; padding:.8rem;
+      text-align:center; cursor:pointer; background:#fffbeb;
+    }
+    .local-pick:hover { border-color:#f59e0b; }
+    .local-pick input { display:none; }
+    .local-pick p { margin:0; font-size:.82rem; color:#92400e; font-weight:600; }
+  </style>
+</head>
+<body>
+
+<div class="app-container" style="max-width:960px; margin:1.5rem auto;">
+  <header class="main-header">
+    <div class="logo-area">
+      <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+      <div class="logo-text"><h1>MASTER MINDS</h1><span>The Learning Hub</span></div>
+    </div>
+    <a href="index.html" class="header-back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+  </header>
+
+  <div class="page-content">
+    <div class="page-title"><i class="fas fa-user-times" style="color:var(--gold)"></i> Not Paid Students</div>
+
+    <!-- CORS fallback -->
+    <div class="local-fallback" id="localFallback">
+      <h4><i class="fas fa-exclamation-triangle"></i> Could not load students from cloud (CORS)</h4>
+      <p>Pick your <strong>students.xlsx</strong> from your computer to continue.</p>
+      <div class="local-pick" onclick="document.getElementById('localFallbackInput').click()">
+        <i class="fas fa-folder-open" style="font-size:1.3rem;color:#b45309;margin-bottom:.3rem;display:block;"></i>
+        <p>📂 Click to select students.xlsx</p>
+        <input type="file" id="localFallbackInput" accept=".xlsx,.xls">
+      </div>
+    </div>
+
+    <!-- Summary chips -->
+    <div class="summary-strip" id="summaryStrip" style="display:none;">
+      <div class="summary-chip"><i class="fas fa-users"></i> Total: <strong id="chipTotal">0</strong></div>
+      <div class="summary-chip" style="background:#fef2f2;border-color:#fca5a5;color:var(--red);">
+        <i class="fas fa-times-circle" style="color:var(--red)"></i> Not Paid: <strong id="chipNotPaid">0</strong>
+      </div>
+      <div class="summary-chip green"><i class="fas fa-check-circle"></i> Paid: <strong id="chipPaid">0</strong></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <div class="input-group">
+        <label><i class="fas fa-search"></i> Search</label>
+        <input type="text" id="filterSearch" placeholder="Name or Hall Ticket…">
+      </div>
+      <div class="input-group">
+        <label><i class="fas fa-layer-group"></i> Group</label>
+        <select id="filterGroup"><option value="">All Groups</option></select>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div id="list">
+      <div class="placeholder-text"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading data…</div>
+    </div>
+
+    <!-- Export -->
+    <div class="export-row">
+      <button class="btn-primary" id="exportNotPaidBtn" style="margin-top:0;">
+        <i class="fas fa-file-excel"></i> Export Not Paid (Excel)
+      </button>
+      <button class="btn-secondary" id="exportFilteredBtn" style="margin-top:0;">
+        <i class="fas fa-download"></i> Export Filtered List
+      </button>
+    </div>
+  </div>
+
+  <footer class="main-footer">
+    <p>Developed by Karthik Bonagiri &nbsp;|&nbsp; Master Minds – The Learning Hub &nbsp;|&nbsp; +91 90148 95357</p>
+  </footer>
+</div>
+
+<script>
+let allStudents  = [];
+let notPaidList  = [];
+let filteredList = [];
+
+async function loadData(studentList) {
+  try {
+    const snap   = await paymentsCollection.get();
+    const paidSet = new Set();
+    snap.forEach(doc => paidSet.add(String(doc.data().hall)));
+
+    notPaidList = studentList.filter(s => !paidSet.has(String(s['Hall Ticket'])));
+    allStudents = studentList;
+
+    document.getElementById('chipTotal').textContent   = allStudents.length;
+    document.getElementById('chipNotPaid').textContent = notPaidList.length;
+    document.getElementById('chipPaid').textContent    = allStudents.length - notPaidList.length;
+    document.getElementById('summaryStrip').style.display = 'flex';
+
+    const groups = [...new Set(allStudents.map(s => s['Group']).filter(Boolean))].sort();
+    const groupSel = document.getElementById('filterGroup');
+    groupSel.innerHTML = '<option value="">All Groups</option>';
+    groups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g; opt.textContent = g;
+      groupSel.appendChild(opt);
+    });
+
+    applyFilters();
+  } catch (err) {
+    document.getElementById('list').innerHTML =
+      `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+async function init() {
+  try {
+    const students = await loadStudentsFromCloud();
+    document.getElementById('localFallback').style.display = 'none';
+    await loadData(students);
+  } catch (err) {
+    if (err.type === 'CORS_ERROR' || err.type === 'FIREBASE_ERROR') {
+      document.getElementById('localFallback').style.display = 'block';
+      document.getElementById('list').innerHTML =
+        '<div class="empty-state"><i class="fas fa-folder-open"></i><p>Select your students.xlsx above to load the list.</p></div>';
+    } else {
+      document.getElementById('list').innerHTML =
+        `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${escapeHtml(err.message)}</p></div>`;
+    }
+  }
+}
+
+// Local file fallback
+document.getElementById('localFallbackInput').addEventListener('change', async e => {
+  if (!e.target.files.length) return;
+  try {
+    const buf = await e.target.files[0].arrayBuffer();
+    const students = parseStudentsFromBuffer(buf);
+    document.getElementById('localFallback').style.display = 'none';
+    showToast(`Loaded ${students.length} students locally`, 'success');
+    await loadData(students);
+  } catch (err) { showToast('Could not read file: ' + err.message, 'error'); }
+  e.target.value = '';
+});
+
+function applyFilters() {
+  const search = document.getElementById('filterSearch').value.trim().toLowerCase();
+  const group  = document.getElementById('filterGroup').value;
+
+  filteredList = notPaidList.filter(s => {
+    const matchSearch = !search ||
+      s['Name'].toLowerCase().includes(search) ||
+      String(s['Hall Ticket']).toLowerCase().includes(search);
+    const matchGroup = !group || s['Group'] === group;
+    return matchSearch && matchGroup;
+  });
+  renderList();
+}
+
+function renderList() {
+  const listEl = document.getElementById('list');
+  if (filteredList.length === 0) {
+    listEl.innerHTML = `<div class="empty-state">
+      <i class="fas fa-check-circle" style="color:var(--green)"></i>
+      <p>${notPaidList.length === 0 ? 'All students have paid! 🎉' : 'No students match your filter.'}</p>
+    </div>`;
+    return;
+  }
+
+  const html = filteredList.map(s => `
+    <div class="notpaid-card">
+      <div>
+        <div class="notpaid-card-name">
+          <i class="fas fa-user" style="color:var(--gold);margin-right:.3rem;"></i>
+          ${escapeHtml(s['Name'])}
+        </div>
+        <div class="notpaid-card-meta">
+          HT: ${escapeHtml(s['Hall Ticket'])}
+          &nbsp;·&nbsp; Father: ${escapeHtml(s['Father Name']) || '—'}
+          &nbsp;·&nbsp; Group: ${escapeHtml(s['Group']) || '—'}
+          &nbsp;·&nbsp; Result: ${escapeHtml(s['Result']) || '—'}
+        </div>
+      </div>
+      <span class="badge badge-unpaid" style="flex-shrink:0;">⚠ Not Paid</span>
+    </div>
+  `).join('');
+
+  listEl.innerHTML = `
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem;">
+      Showing <strong>${filteredList.length}</strong> student${filteredList.length !== 1 ? 's' : ''}
+    </div>
+    <div class="notpaid-grid">${html}</div>`;
+}
+
+document.getElementById('filterSearch').addEventListener('input', applyFilters);
+document.getElementById('filterGroup').addEventListener('change', applyFilters);
+
+document.getElementById('exportNotPaidBtn').addEventListener('click', () => {
+  if (!notPaidList.length) { showToast('No unpaid students.', 'info'); return; }
+  exportToExcel(notPaidList, 'Not_Paid_Students', 'NotPaid');
+  showToast('Exported!', 'success');
+});
+
+document.getElementById('exportFilteredBtn').addEventListener('click', () => {
+  if (!filteredList.length) { showToast('No data in current filter.', 'info'); return; }
+  exportToExcel(filteredList, 'Not_Paid_Filtered', 'NotPaid');
+  showToast('Exported filtered list!', 'success');
+});
+
+init();
+</script>
+</body>
+</html>

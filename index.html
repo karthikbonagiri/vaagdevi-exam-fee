@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Master Minds | Exam Fee Manager</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="utils.js"></script>
+  <style>
+    /* ── Inline extras for index page ── */
+    .cors-alert {
+      background: #fff8e1; border: 1.5px solid #fde68a;
+      border-radius: 12px; padding: 1rem 1.1rem;
+      margin-top: .9rem; display: none;
+    }
+    .cors-alert h4 {
+      font-family: 'Sora', sans-serif; font-size: .9rem;
+      color: #92400e; margin-bottom: .4rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .cors-alert p { font-size: .8rem; color: #78350f; margin-bottom: .6rem; }
+    .cors-alert .local-drop {
+      border: 2px dashed #fcd34d; border-radius: 10px;
+      padding: .9rem; text-align: center; cursor: pointer;
+      background: #fffbeb; transition: all .2s;
+    }
+    .cors-alert .local-drop:hover { border-color: #f59e0b; background: #fef3c7; }
+    .cors-alert .local-drop input { display: none; }
+    .cors-alert .local-drop p { margin: 0; font-size: .82rem; color: #92400e; font-weight: 600; }
+    .cors-fix-steps {
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 10px; padding: .8rem 1rem;
+      margin-top: .7rem; font-size: .78rem; color: #166534;
+    }
+    .cors-fix-steps b { display: block; margin-bottom: .3rem; }
+    .cors-fix-steps code {
+      display: block; background: #dcfce7; padding: .35rem .6rem;
+      border-radius: 6px; font-family: monospace; margin: .25rem 0;
+      word-break: break-all;
+    }
+    #loginOverlay {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.85); z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .login-card {
+      background: white; padding: 2rem; border-radius: 28px;
+      max-width: 360px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+    }
+    .login-card i { font-size: 3rem; color: var(--gold); margin-bottom: 1rem; }
+    .login-card h2 { font-family: 'Sora', sans-serif; margin-bottom: 0.5rem; color: var(--navy); }
+    .login-card input {
+      width: 100%; padding: 0.8rem; border-radius: 40px; border: 1px solid var(--border);
+      margin-bottom: 1rem; font-family: inherit;
+    }
+    .login-card button { margin-top: 0; }
+    .login-error { color: var(--red); font-size: 0.8rem; margin-top: 0.5rem; }
+    /* Modal styles */
+    .modal {
+      display: none; position: fixed; z-index: 10000; left: 0; top: 0;
+      width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);
+      align-items: center; justify-content: center;
+    }
+    .modal-content {
+      background: white; padding: 1.8rem; border-radius: 24px;
+      max-width: 450px; width: 90%; box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    }
+    .modal-content h3 {
+      font-family: 'Sora', sans-serif; margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .modal-content input {
+      width: 100%; padding: 0.7rem; margin-bottom: 0.8rem;
+      border: 1px solid var(--border); border-radius: 12px;
+    }
+    .modal-buttons {
+      display: flex; gap: 0.8rem; margin-top: 0.5rem;
+    }
+    .modal-buttons button { flex: 1; }
+    /* Mobile reorder: nav links above stats card */
+    @media (max-width: 960px) {
+      .main-grid {
+        display: flex;
+        flex-direction: column;
+      }
+      .col-right {
+        order: -1;
+      }
+      .nav-links {
+        margin-bottom: 1rem;
+      }
+    }
+    /* Header admin link */
+    .header-admin-link {
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(4px);
+      padding: 0.45rem 1.1rem;
+      border-radius: 40px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #ffeaaf;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: all 0.2s;
+      margin-left: 0.5rem;
+    }
+    .header-admin-link:hover {
+      background: rgba(255,255,255,0.28);
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 🔐 Firebase Auth Login Overlay -->
+<div id="loginOverlay">
+  <div class="login-card">
+    <i class="fas fa-lock"></i>
+    <h2>Exam Fee Management</h2>
+    <p style="margin-bottom:1.2rem; color:var(--muted);">Authorized access only</p>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="off">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button id="loginBtn" class="btn-primary" style="margin-top:0;">Sign In</button>
+    <div id="loginError" class="login-error"></div>
+    <p style="font-size:0.7rem; color:#888; margin-top:1rem;">Developed by Karthik Bonagiri</p>
+  </div>
+</div>
+
+<!-- Main App -->
+<div class="app-container" id="mainApp" style="display:none;">
+  <header class="main-header">
+    <div class="logo-area">
+      <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+      <div class="logo-text">
+        <h1>VAAGDEVI DEGREE COLLEGE, BOATH</h1>
+        <span>Powered by MASTER MINDS – The Learning Hub</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <div class="header-badge" id="loadModeBadge"><i class="fas fa-cloud"></i> Cloud Mode</div>
+      <a href="admin.html" class="header-admin-link"><i class="fas fa-user-shield"></i> Admin</a>
+    </div>
+  </header>
+
+  <div style="text-align:center; margin: 0.5rem 0 0 0; padding:0 1rem;">
+    <h2 style="font-family:'Sora',sans-serif; font-size:1.4rem; font-weight:700; background:linear-gradient(135deg,var(--navy),var(--gold)); -webkit-background-clip:text; background-clip:text; color:transparent; display:inline-block;">📋 Exam Fee Management</h2>
+  </div>
+
+  <div class="main-grid">
+    <!-- LEFT COLUMN -->
+    <div class="col-left">
+      <!-- Student Lookup -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-user-graduate"></i><h3>Student Lookup</h3></div>
+        <div class="card-body">
+          <div class="search-wrapper">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="search" placeholder="Search by Hall Ticket or Name" autocomplete="off">
+            <button class="clear-btn" id="clearSearch" title="Clear"><i class="fas fa-times"></i></button>
+          </div>
+          <div id="studentCard" class="student-info-card">
+            <div class="placeholder-text"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading student data…</div>
+          </div>
+          <button id="addStudentBtn" class="btn-secondary" style="margin-top:1rem; background:#e8f5e9; border-color:#c8e6c9;">
+            <i class="fas fa-user-plus"></i> Add New Student
+          </button>
+        </div>
+      </div>
+
+      <!-- Record Payment -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-rupee-sign"></i><h3>Record Payment</h3></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="input-group">
+              <label><i class="fas fa-receipt"></i> Regular Fee (₹)</label>
+              <input type="number" id="regular" placeholder="0" min="0">
+            </div>
+            <div class="input-group">
+              <label><i class="fas fa-clock"></i> Backlog Fee (₹)</label>
+              <input type="number" id="backlog" placeholder="0" min="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label><i class="fas fa-credit-card"></i> Payment Mode</label>
+              <select id="mode">
+                <option value="Cash">💵 Cash</option>
+                <option value="Online">📱 Online</option>
+              </select>
+            </div>
+            <div class="input-group" id="utrGroup" style="display:none;">
+              <label><i class="fas fa-qrcode"></i> UTR / Transaction ID</label>
+              <input type="text" id="utr" placeholder="e.g. 123456789012">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label><i class="fas fa-calendar-alt"></i> Payment Date</label>
+              <input type="date" id="date">
+            </div>
+          </div>
+          <button class="btn-primary" id="savePaymentBtn">
+            <i class="fas fa-save"></i> Save Payment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="col-right">
+      <!-- Navigation Links -->
+      <div class="nav-links">
+        <a href="notpaid.html" class="nav-link"><i class="fas fa-user-times"></i> Not Paid</a>
+        <a href="payment-history.html" class="nav-link"><i class="fas fa-history"></i> Payment History</a>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-chart-line"></i><h3>Quick Stats</h3></div>
+        <div class="card-body">
+          <div class="stat-item">
+            <span class="stat-label"><i class="fas fa-users"></i> Total Students</span>
+            <span class="stat-value" id="statTotal">—</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label"><i class="fas fa-check-circle"></i> Paid</span>
+            <span class="stat-value success" id="statPaid">—</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label"><i class="fas fa-times-circle"></i> Not Paid</span>
+            <span class="stat-value danger" id="statNotPaid">—</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label"><i class="fas fa-rupee-sign"></i> Total Collected</span>
+            <span class="stat-value success" id="statCollected">—</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label"><i class="fas fa-cloud"></i> Cloud</span>
+            <span class="stat-value success" id="statCloud">● Live</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cloud Storage -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-cloud-upload-alt"></i><h3>Cloud Storage</h3></div>
+        <div class="card-body">
+          <div class="upload-area" id="uploadArea">
+            <div class="upload-icon"><i class="fas fa-file-excel"></i></div>
+            <p id="uploadAreaText">Click or drag &amp; drop <strong>students.xlsx</strong></p>
+            <input type="file" id="cloudUploadInput" accept=".xlsx,.xls">
+          </div>
+          <div class="button-group" style="margin-top:.7rem;">
+            <button class="btn-secondary" id="uploadToCloudBtn"><i class="fas fa-upload"></i> Upload to Cloud</button>
+          </div>
+          <hr>
+          <button class="btn-secondary" id="syncBtn"><i class="fas fa-sync-alt"></i> Refresh Stats</button>
+
+          <!-- CORS fallback -->
+          <div class="cors-alert" id="corsAlert">
+            <h4><i class="fas fa-exclamation-triangle"></i> Could not load students from cloud</h4>
+            <p>Your browser blocked the download (CORS). Use the workaround below — just pick your <strong>students.xlsx</strong> from your computer. Payments still save to cloud.</p>
+            <div class="local-drop" id="localDrop" onclick="document.getElementById('localFileInput').click()">
+              <i class="fas fa-folder-open" style="font-size:1.4rem;color:#b45309;margin-bottom:.3rem;display:block;"></i>
+              <p>📂 Click to load students.xlsx from your computer</p>
+              <input type="file" id="localFileInput" accept=".xlsx,.xls">
+            </div>
+            <div class="cors-fix-steps">
+              <b>🔧 Permanent fix — run this once in your terminal:</b>
+              <code>npm install -g firebase-tools</code>
+              <code>firebase login</code>
+              Save a file called <strong>cors.json</strong> with the content from README.md, then:
+              <code>gsutil cors set cors.json gs://exam-fee-management.firebasestorage.app</code>
+              After this, reload the page — cloud loading will work automatically.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup & Restore -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-database"></i><h3>Backup &amp; Restore</h3></div>
+        <div class="card-body">
+          <button class="btn-secondary" id="exportBackupBtn"><i class="fas fa-download"></i> Export All Data (JSON)</button>
+          <button class="btn-secondary" id="importBackupBtn"><i class="fas fa-upload"></i> Import JSON Backup</button>
+          <input type="file" id="restoreInput" accept=".json" style="display:none;">
+          <div class="info-note">
+            <i class="fas fa-info-circle"></i>
+            Export includes students &amp; all payments. Import overwrites all cloud data.
+          </div>
+        </div>
+      </div>
+
+      <!-- Logout button -->
+      <div style="margin-top: 1rem;">
+        <button id="logoutBtn" class="btn-secondary danger" style="background:#fef2f2;"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="main-footer">
+    <p>Developed by Karthik Bonagiri &nbsp;|&nbsp; Master Minds – The Learning Hub &nbsp;|&nbsp; +91 90148 95357</p>
+  </footer>
+</div>
+
+<!-- Modal for adding new student -->
+<div id="addStudentModal" class="modal">
+  <div class="modal-content">
+    <h3><i class="fas fa-user-plus"></i> Add New Student</h3>
+    <input type="text" id="newHallTicket" placeholder="Hall Ticket *" required>
+    <input type="text" id="newName" placeholder="Name *" required>
+    <input type="text" id="newFatherName" placeholder="Father Name">
+    <input type="text" id="newGroup" placeholder="Group">
+    <input type="text" id="newResult" placeholder="Result">
+    <div class="modal-buttons">
+      <button class="btn-secondary" id="cancelAddBtn">Cancel</button>
+      <button class="btn-primary" id="confirmAddBtn">Save Student</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Firebase Auth
+const auth = firebase.auth();
+const loginOverlay = document.getElementById('loginOverlay');
+const mainApp = document.getElementById('mainApp');
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const loginBtn = document.getElementById('loginBtn');
+const loginError = document.getElementById('loginError');
+const logoutBtn = document.getElementById('logoutBtn');
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    loginOverlay.style.display = 'none';
+    mainApp.style.display = 'block';
+    initStudents();
+  } else {
+    loginOverlay.style.display = 'flex';
+    mainApp.style.display = 'none';
+  }
+});
+
+loginBtn.addEventListener('click', async () => {
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value;
+  loginError.innerText = '';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch (err) {
+    loginError.innerText = err.message;
+  }
+});
+
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', async () => {
+    await auth.signOut();
+    students = [];
+    selectedStudent = null;
+    location.reload();
+  });
+}
+
+// ─────────────────────────────────────────────
+// App logic (only after login)
+// ─────────────────────────────────────────────
+let students = [];
+let selectedStudent = null;
+let paidSet = new Set();
+
+const searchEl = document.getElementById('search');
+const clearBtn = document.getElementById('clearSearch');
+const cardEl = document.getElementById('studentCard');
+const saveBtn = document.getElementById('savePaymentBtn');
+const regularEl = document.getElementById('regular');
+const backlogEl = document.getElementById('backlog');
+const modeEl = document.getElementById('mode');
+const utrEl = document.getElementById('utr');
+const utrGroup = document.getElementById('utrGroup');
+const dateEl = document.getElementById('date');
+const uploadArea = document.getElementById('uploadArea');
+const uploadInput = document.getElementById('cloudUploadInput');
+const uploadBtn = document.getElementById('uploadToCloudBtn');
+const syncBtn = document.getElementById('syncBtn');
+const exportBtn = document.getElementById('exportBackupBtn');
+const importBtn = document.getElementById('importBackupBtn');
+const restoreInput = document.getElementById('restoreInput');
+const corsAlert = document.getElementById('corsAlert');
+const localInput = document.getElementById('localFileInput');
+const addStudentBtn = document.getElementById('addStudentBtn');
+const modal = document.getElementById('addStudentModal');
+const cancelAddBtn = document.getElementById('cancelAddBtn');
+const confirmAddBtn = document.getElementById('confirmAddBtn');
+const newHallTicket = document.getElementById('newHallTicket');
+const newName = document.getElementById('newName');
+const newFatherName = document.getElementById('newFatherName');
+const newGroup = document.getElementById('newGroup');
+const newResult = document.getElementById('newResult');
+
+if (modeEl) {
+  modeEl.addEventListener('change', () => {
+    utrGroup.style.display = modeEl.value === 'Online' ? 'block' : 'none';
+    if (modeEl.value !== 'Online') utrEl.value = '';
+  });
+}
+
+async function loadStats() {
+  try {
+    const snap = await paymentsCollection.get();
+    const payments = [];
+    snap.forEach(doc => payments.push(doc.data()));
+    paidSet = new Set(payments.map(p => String(p.hall)));
+    const total = payments.reduce((s, p) => s + (parseFloat(p.regularFee) || 0) + (parseFloat(p.backlogFee) || 0), 0);
+    document.getElementById('statPaid').textContent = paidSet.size;
+    document.getElementById('statNotPaid').textContent = Math.max(0, students.length - paidSet.size);
+    document.getElementById('statCollected').textContent = formatINR(total);
+    document.getElementById('statCloud').textContent = '● Live';
+    document.getElementById('statCloud').className = 'stat-value success';
+  } catch {
+    document.getElementById('statCloud').textContent = '✗ Error';
+    document.getElementById('statCloud').className = 'stat-value danger';
+  }
+}
+
+async function onStudentsLoaded() {
+  document.getElementById('statTotal').textContent = students.length;
+  cardEl.innerHTML = '<div class="placeholder-text"><i class="fas fa-check-circle" style="color:#2e7d32"></i>&nbsp; Student data loaded. Search above.</div>';
+  await loadStats();
+}
+
+function setCardError(message, showCors = false) {
+  cardEl.innerHTML = `<div class="placeholder-text"><i class="fas fa-exclamation-triangle" style="color:#e65100"></i>&nbsp; ${escapeHtml(message)}</div>`;
+  if (showCors) corsAlert.style.display = 'block';
+}
+
+async function initStudents() {
+  if (!mainApp || mainApp.style.display !== 'block') return;
+  cardEl.innerHTML = '<div class="placeholder-text"><i class="fas fa-spinner fa-spin"></i>&nbsp; Loading student data…</div>';
+  corsAlert.style.display = 'none';
+  try {
+    students = await loadStudentsFromCloud();
+    await onStudentsLoaded();
+  } catch (err) {
+    switch (err.type) {
+      case 'NOT_FOUND':
+        setCardError('students.xlsx not found in cloud. Upload it using the Cloud Storage section above.');
+        break;
+      case 'CORS_ERROR':
+        setCardError('Cloud download blocked (CORS). Use the local file option below ↓', true);
+        document.getElementById('loadModeBadge').innerHTML = '<i class="fas fa-laptop"></i> Local Mode';
+        break;
+      case 'PARSE_ERROR':
+        setCardError(err.message);
+        break;
+      default:
+        setCardError(err.message, true);
+    }
+    document.getElementById('statTotal').textContent = '0';
+  }
+}
+
+async function saveStudentsToCloud() {
+  if (!students.length) return;
+  const ws = XLSX.utils.json_to_sheet(students);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Students');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+  const file = new File([blob], 'students.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  await studentsExcelRef.put(file);
+}
+
+// Add new student
+addStudentBtn.addEventListener('click', () => {
+  modal.style.display = 'flex';
+});
+cancelAddBtn.addEventListener('click', () => {
+  modal.style.display = 'none';
+  newHallTicket.value = '';
+  newName.value = '';
+  newFatherName.value = '';
+  newGroup.value = '';
+  newResult.value = '';
+});
+confirmAddBtn.addEventListener('click', async () => {
+  const ht = newHallTicket.value.trim();
+  const name = newName.value.trim();
+  if (!ht || !name) {
+    showToast('Hall Ticket and Name are required.', 'warning');
+    return;
+  }
+  if (students.some(s => String(s['Hall Ticket']) === ht)) {
+    showToast(`Hall Ticket ${ht} already exists.`, 'error');
+    return;
+  }
+  const newStudent = {
+    'Hall Ticket': ht,
+    'Name': name,
+    'Father Name': newFatherName.value.trim() || '',
+    'Group': newGroup.value.trim() || '',
+    'Result': newResult.value.trim() || ''
+  };
+  students.push(newStudent);
+  try {
+    await saveStudentsToCloud();
+    showToast(`Student ${name} added successfully!`, 'success');
+    modal.style.display = 'none';
+    newHallTicket.value = '';
+    newName.value = '';
+    newFatherName.value = '';
+    newGroup.value = '';
+    newResult.value = '';
+    document.getElementById('statTotal').textContent = students.length;
+    await loadStats();
+    if (searchEl.value.trim() === '') {
+      cardEl.innerHTML = '<div class="placeholder-text"><i class="fas fa-search"></i>&nbsp; Type to find a student</div>';
+    } else {
+      searchEl.dispatchEvent(new Event('input'));
+    }
+  } catch (err) {
+    showToast('Failed to save student to cloud: ' + err.message, 'error');
+    students.pop();
+  }
+});
+
+if (localInput) {
+  localInput.addEventListener('change', async () => {
+    if (!localInput.files.length) return;
+    const file = localInput.files[0];
+    try {
+      const buf = await file.arrayBuffer();
+      students = parseStudentsFromBuffer(buf);
+      corsAlert.style.display = 'none';
+      document.getElementById('loadModeBadge').innerHTML = '<i class="fas fa-laptop"></i> Local Mode';
+      showToast(`Loaded ${students.length} students from ${file.name}`, 'success');
+      await onStudentsLoaded();
+    } catch (err) {
+      showToast('Could not read file: ' + err.message, 'error');
+    }
+    localInput.value = '';
+  });
+}
+
+if (searchEl) {
+  searchEl.addEventListener('input', function () {
+    const val = this.value.trim().toLowerCase();
+    clearBtn.style.display = val ? 'flex' : 'none';
+    if (!val) {
+      cardEl.innerHTML = '<div class="placeholder-text"><i class="fas fa-search"></i>&nbsp; Type to find a student</div>';
+      selectedStudent = null;
+      return;
+    }
+    const found = students.find(s => String(s['Hall Ticket']).toLowerCase() === val || (s['Name'] && s['Name'].toLowerCase().includes(val)));
+    if (found) {
+      selectedStudent = found;
+      const isPaid = paidSet.has(String(found['Hall Ticket']));
+      cardEl.innerHTML = `
+        <div class="student-info">
+          <div class="student-name">
+            <i class="fas fa-user-graduate"></i>
+            ${escapeHtml(found['Name'])}
+            <span class="badge ${isPaid ? 'badge-paid' : 'badge-unpaid'}">${isPaid ? '✅ Paid' : '⚠ Not Paid'}</span>
+          </div>
+          <div><i class="fas fa-id-card"></i>&nbsp;<strong>Hall Ticket:</strong>&nbsp;${escapeHtml(found['Hall Ticket'])}</div>
+          <div><i class="fas fa-user"></i>&nbsp;<strong>Father:</strong>&nbsp;${escapeHtml(found['Father Name'])}</div>
+          <div><i class="fas fa-layer-group"></i>&nbsp;<strong>Group:</strong>&nbsp;${escapeHtml(found['Group'])}</div>
+          <div><i class="fas fa-chart-bar"></i>&nbsp;<strong>Result:</strong>&nbsp;${escapeHtml(found['Result'])}</div>
+        </div>`;
+    } else {
+      cardEl.innerHTML = '<div class="placeholder-text"><i class="fas fa-times-circle" style="color:#c62828"></i>&nbsp; Student not found</div>';
+      selectedStudent = null;
+    }
+  });
+}
+
+if (clearBtn) {
+  clearBtn.addEventListener('click', () => {
+    searchEl.value = '';
+    clearBtn.style.display = 'none';
+    cardEl.innerHTML = '<div class="placeholder-text"><i class="fas fa-search"></i>&nbsp; Type to find a student</div>';
+    selectedStudent = null;
+  });
+}
+
+async function isUtrDuplicate(utr) {
+  if (!utr) return false;
+  const snapshot = await paymentsCollection.where('utr', '==', utr).get();
+  return !snapshot.empty;
+}
+
+if (saveBtn) {
+  saveBtn.addEventListener('click', async () => {
+    if (!selectedStudent) { showToast('Search and select a student first.', 'warning'); return; }
+    const regular = regularEl.value.trim();
+    const backlog = backlogEl.value.trim();
+    const mode = modeEl.value;
+    let utr = utrEl.value.trim();
+    let date = dateEl.value;
+    if (!regular && !backlog) { showToast('Enter at least one fee amount.', 'warning'); return; }
+    if (mode === 'Online' && !utr) { showToast('UTR / Transaction ID required for online payment.', 'warning'); return; }
+    if (mode !== 'Online') utr = '';
+    if (!date) date = new Date().toISOString().split('T')[0];
+    
+    if (mode === 'Online' && utr) {
+      const duplicate = await isUtrDuplicate(utr);
+      if (duplicate) {
+        showToast('❌ This UTR number has already been used. Please check and enter a valid UTR.', 'error');
+        return;
+      }
+    }
+    
+    const ht = String(selectedStudent['Hall Ticket']);
+    if (paidSet.has(ht)) {
+      const go = confirm(`⚠️ "${selectedStudent['Name']}" already has a payment recorded!\n\nRecord an additional payment?`);
+      if (!go) return;
+    }
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+    try {
+      await paymentsCollection.add({
+        hall: ht, name: selectedStudent['Name'],
+        fatherName: selectedStudent['Father Name'] || '',
+        group: selectedStudent['Group'] || '',
+        regularFee: regular || '0', backlogFee: backlog || '0',
+        mode, utr, date, timestamp: Date.now()
+      });
+      paidSet.add(ht);
+      showToast(`Payment saved for ${selectedStudent['Name']}`, 'success');
+      regularEl.value = ''; backlogEl.value = ''; utrEl.value = '';
+      dateEl.value = new Date().toISOString().split('T')[0];
+      searchEl.dispatchEvent(new Event('input'));
+      await loadStats();
+    } catch (err) { showToast('Save failed: ' + err.message, 'error'); }
+    finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Payment';
+    }
+  });
+}
+
+// Upload area
+if (uploadArea) {
+  uploadArea.addEventListener('click', () => uploadInput.click());
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+  uploadArea.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && (f.name.endsWith('.xlsx') || f.name.endsWith('.xls'))) {
+      const dt = new DataTransfer(); dt.items.add(f); uploadInput.files = dt.files;
+      document.getElementById('uploadAreaText').innerHTML = `<strong>${escapeHtml(f.name)}</strong> ready — click Upload`;
+    } else { showToast('Please drop an Excel (.xlsx) file.', 'warning'); }
+  });
+  uploadInput.addEventListener('change', () => {
+    if (uploadInput.files[0])
+      document.getElementById('uploadAreaText').innerHTML = `<strong>${escapeHtml(uploadInput.files[0].name)}</strong> ready — click Upload`;
+  });
+}
+
+if (uploadBtn) {
+  uploadBtn.addEventListener('click', async () => {
+    if (!uploadInput.files.length) { showToast('Select an Excel file first.', 'warning'); return; }
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading…';
+    try {
+      await studentsExcelRef.put(uploadInput.files[0]);
+      showToast('Uploaded! Reloading data…', 'success');
+      uploadInput.value = '';
+      document.getElementById('uploadAreaText').innerHTML = 'Click or drag &amp; drop <strong>students.xlsx</strong>';
+      await initStudents();
+    } catch (err) { showToast('Upload failed: ' + err.message, 'error'); }
+    finally {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload to Cloud';
+    }
+  });
+}
+
+if (syncBtn) {
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing…';
+    await loadStats();
+    syncBtn.disabled = false;
+    syncBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Stats';
+    showToast('Stats refreshed!', 'success');
+  });
+}
+
+if (exportBtn) {
+  exportBtn.addEventListener('click', async () => {
+    exportBtn.disabled = true;
+    exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting…';
+    try {
+      const snap = await paymentsCollection.get();
+      const paymentsData = [];
+      snap.forEach(doc => paymentsData.push({ id: doc.id, ...doc.data() }));
+      const backup = { version: '2.0', timestamp: new Date().toISOString(), students, payments: paymentsData };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `masterminds_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click(); URL.revokeObjectURL(url);
+      showToast('Backup downloaded!', 'success');
+    } catch (err) { showToast('Export failed: ' + err.message, 'error'); }
+    finally {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = '<i class="fas fa-download"></i> Export All Data (JSON)';
+    }
+  });
+}
+
+if (importBtn) {
+  importBtn.addEventListener('click', () => restoreInput.click());
+  restoreInput.addEventListener('change', async e => {
+    if (!e.target.files.length) return;
+    if (!confirm('⚠️ This will overwrite ALL cloud data (students + payments).\n\nAre you sure?')) return;
+    const reader = new FileReader();
+    reader.onload = async evt => {
+      try {
+        const backup = JSON.parse(evt.target.result);
+        if (!backup.students || !backup.payments) { showToast('Invalid backup file.', 'error'); return; }
+        if (backup.students.length > 0) {
+          const ws = XLSX.utils.json_to_sheet(backup.students);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Students');
+          const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+          await studentsExcelRef.put(new File([buf], 'students.xlsx'));
+        }
+        const snap = await paymentsCollection.get();
+        const batch = db.batch();
+        snap.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        for (const p of backup.payments) {
+          const { id, ...data } = p;
+          await paymentsCollection.add(data);
+        }
+        showToast('Restore successful! Reloading…', 'success');
+        setTimeout(() => location.reload(), 1600);
+      } catch (err) { showToast('Restore error: ' + err.message, 'error'); }
+    };
+    reader.readAsText(e.target.files[0]);
+    restoreInput.value = '';
+  });
+}
+
+if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+</script>
+</body>
+</html>
